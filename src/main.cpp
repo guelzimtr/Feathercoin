@@ -1079,7 +1079,7 @@ if ((nHeight >= nForkTwo) || (fTestNet && (nHeight >= 1008)))
 	nTargetTimespan = (7 * 24 * 60 * 60) / 32; // 7/32 days
 
 // The 3rd hard fork
-int nForkThree = 200000;
+int nForkThree = 200010;
 if (nHeight >= nForkThree || (fTestNet && (nHeight >= 2010))) {
 	int nTargetTimespan = (24 * 60 * 60) / 96; // 3.5 days
 	static const int nTargetSpacing = 60; // 1 minutes
@@ -1112,7 +1112,7 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     // 2016 blocks initial, 504 after the 1st, 126 after the 2nd hard fork, 15 after the 3rd hard fork
     int nInterval = nTargetTimespan / nTargetSpacing;
 
-    bool fHardFork = (nHeight == nForkOne) || (nHeight == nForkTwo);
+    bool fHardFork = (nHeight == nForkOne) || (nHeight == nForkTwo) || (nHeight == nForkThree);
     if(fTestNet) fHardFork = false;
 
     // Difficulty rules regular blocks
