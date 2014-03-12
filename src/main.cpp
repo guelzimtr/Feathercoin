@@ -1065,18 +1065,38 @@ uint256 static GetOrphanRoot(const CBlockHeader* pblock)
     return pblock->GetHash();
 }
 
+int nTargetTimespan = 3.5 * 24 * 60 * 60; // 3.5 days
+static const int nTargetSpacing = 2.5 * 60; // 2.5 minutes
+
+// The 1st hard fork
+int nForkOne = 33000;
+if (nHeight >= nForkOne)
+    nTargetTimespan = (7 * 24 * 60 * 60) / 8; // 7/8 days
+
+// The 2nd hard fork
+int nForkTwo = 87948;
+if ((nHeight >= nForkTwo) || (fTestNet && (nHeight >= 1008)))
+	nTargetTimespan = (7 * 24 * 60 * 60) / 32; // 7/32 days
+
+// The 3rd hard fork
+int nForkThree = 200000;
+if (nHeight >= nForkThree || (fTestNet && (nHeight >= 2010))) {
+	int nTargetTimespan = (24 * 60 * 60) / 96; // 3.5 days
+	static const int nTargetSpacing = 60; // 1 minutes
+}
+	
 int64 static GetBlockValue(int nHeight, int64 nFees)
 {
     int64 nSubsidy = 200 * COIN;
+	
+	if(nHeight >= nForkThree)
+		int64 nSubsidy = 80 * COIN;
 
     // Subsidy is cut in half every 840000 blocks, which will occur approximately every 4 years
     nSubsidy >>= (nHeight / 840000); // Feathercoin: 840k blocks in ~4 years
 
     return nSubsidy + nFees;
 }
-
-int nTargetTimespan = 3.5 * 24 * 60 * 60; // 3.5 days
-static const int nTargetSpacing = 2.5 * 60; // 2.5 minutes
 
 unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
@@ -1089,17 +1109,7 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     // The next block
     int nHeight = pindexLast->nHeight + 1;
 
-    // The 1st hard fork
-    int nForkOne = 33000;
-    if(nHeight >= nForkOne)
-      nTargetTimespan = (7 * 24 * 60 * 60) / 8; // 7/8 days
-
-    // The 2nd hard fork
-    int nForkTwo = 87948;
-    if((nHeight >= nForkTwo) || (fTestNet && (nHeight >= 2016)))
-      nTargetTimespan = (7 * 24 * 60 * 60) / 32; // 7/32 days
-
-    // 2016 blocks initial, 504 after the 1st and 126 after the 2nd hard fork
+    // 2016 blocks initial, 504 after the 1st, 126 after the 2nd hard fork, 15 after the 3rd hard fork
     int nInterval = nTargetTimespan / nTargetSpacing;
 
     bool fHardFork = (nHeight == nForkOne) || (nHeight == nForkTwo);
@@ -1142,7 +1152,7 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     printf("RETARGET: nActualTimespan = %d before bounds\n", nActualTimespan);
 
     // Additional averaging over 4x nInterval window
-    if((nHeight >= nForkTwo) || (fTestNet && (nHeight > 4*nInterval))) {
+    if((nHeight >= nForkTwo) || (fTestNet && (nHeight > 2*nInterval))) {
         nInterval *= 4;
 
         const CBlockIndex* pindexFirst = pindexLast;
@@ -1154,6 +1164,40 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
 
         // Average between short and long windows
         int nActualTimespanAvg = (nActualTimespan + nActualTimespanLong)/2;
+
+        // Apply .25 damping
+        nActualTimespan = nActualTimespanAvg + 3*nTargetTimespan;
+        nActualTimespan /= 4;
+
+        printf("RETARGET: nActualTimespanLong = %d, nActualTimeSpanAvg = %d, nActualTimespan (damped) = %d\n",
+          nActualTimespanLong, nActualTimespanAvg, nActualTimespan);
+    }
+	
+	// Additional averaging over 8x and 34x nInterval window
+    if((nHeight >= nForkThree) || (fTestNet && (nHeight > 2010))) {
+	
+		// Average over 8x nInterval
+        nIntervalMedium =  nInterval * 8;
+		
+        const CBlockIndex* pindexFirst = pindexLast;
+        for(int i = 0; pindexFirst && i < nIntervalMedium; i++)
+          pindexFirst = pindexFirst->pprev;
+
+        int nActualTimespanMedium =
+          (pindexLast->GetBlockTime() - pindexFirst->GetBlockTime())/8;
+		
+		// Average over 34x nInterval
+		nIntervalLong =  nInterval * 34;
+		
+		const CBlockIndex* pindexFirst = pindexLast;
+        for(int i = 0; pindexFirst && i < nIntervalLong; i++)
+          pindexFirst = pindexFirst->pprev;
+
+        int nActualTimespanLong =
+          (pindexLast->GetBlockTime() - pindexFirst->GetBlockTime())/34;
+
+        // Average between short and long windows
+        int nActualTimespanAvg = (nActualTimespan + nActualTimespanMedium + nActualTimespanLong)/3;
 
         // Apply .25 damping
         nActualTimespan = nActualTimespanAvg + 3*nTargetTimespan;
