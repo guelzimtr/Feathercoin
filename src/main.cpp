@@ -1173,28 +1173,28 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
           nActualTimespanLong, nActualTimespanAvg, nActualTimespan);
     }
 	
-	// Additional averaging over 8x and 34x nInterval window
+	// Additional averaging over 8x and 32x nInterval window
     if((nHeight >= nForkThree) || (fTestNet && (nHeight > 2010))) {
 	
 		// Average over 8x nInterval
-        nIntervalMedium =  nInterval * 8;
+        nInterval *= 8;
 		
         const CBlockIndex* pindexFirst = pindexLast;
-        for(int i = 0; pindexFirst && i < nIntervalMedium; i++)
+        for(int i = 0; pindexFirst && i < nInterval; i++)
           pindexFirst = pindexFirst->pprev;
 
         int nActualTimespanMedium =
           (pindexLast->GetBlockTime() - pindexFirst->GetBlockTime())/8;
 		
-		// Average over 34x nInterval
-		nIntervalLong =  nInterval * 34;
+		// Average over 32x nInterval
+		nInterval *= 4;
 		
 		const CBlockIndex* pindexFirst = pindexLast;
-        for(int i = 0; pindexFirst && i < nIntervalLong; i++)
+        for(int i = 0; pindexFirst && i < nInterval; i++)
           pindexFirst = pindexFirst->pprev;
 
         int nActualTimespanLong =
-          (pindexLast->GetBlockTime() - pindexFirst->GetBlockTime())/34;
+          (pindexLast->GetBlockTime() - pindexFirst->GetBlockTime())/32;
 
         // Average between short and long windows
         int nActualTimespanAvg = (nActualTimespan + nActualTimespanMedium + nActualTimespanLong)/3;
@@ -2253,13 +2253,19 @@ bool CBlock::AcceptBlock(CValidationState &state, CDiskBlockPos *dbp)
             return state.Invalid(error("AcceptBlock() : block's timestamp is too early"));
 
     // limit block in future accepted in chain to only a time window of 30 min
-    if (GetBlockTime() > GetAdjustedTime() + 30 * 60)
+	if (GetBlockTime() > GetAdjustedTime() + 30 * 60) {
+		return error("AcceptBlock() : block's timestamp too far in the future");
+	} else if ((nHeight > 200010) && GetBlockTime() > GetAdjustedTime() + 15 * 60) { // 15 minutes
         return error("AcceptBlock() : block's timestamp too far in the future");
+	}
 
     // Check timestamp against prev it should not be more then 2 times the window
-    if ((nHeight > 87948) && (GetBlockTime() <= pindexPrev->GetBlockTime() - 2 * 30 * 60))
+    if ((nHeight > 87948) && (GetBlockTime() <= pindexPrev->GetBlockTime() - 2 * 30 * 60)) {
         return error("AcceptBlock() : block's timestamp is too early compare to last block");
-			
+	} else if ((nHeight > 200010) && (GetBlockTime() <= pindexPrev->GetBlockTime() - 15 * 60)) { // 15 minutes
+		return error("AcceptBlock() : block's timestamp is too early compare to last block");
+	}
+	
         // Check that all transactions are finalized
         BOOST_FOREACH(const CTransaction& tx, vtx)
             if (!tx.IsFinal(nHeight, GetBlockTime()))
